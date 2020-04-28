@@ -1,0 +1,62 @@
+<form theme="dark">
+  <label>Post-Incident Review</label>
+  <fieldset submitButton="false">
+    <input type="time" token="field3">
+      <label></label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="multiselect" token="types">
+      <label>Event Types</label>
+      <choice value="incident">Incidents</choice>
+      <choice value="oncall">On Call Changes</choice>
+      <choice value="chat">Chats</choice>
+      <choice value="paging">Paging</choice>
+      <delimiter>,</delimiter>
+      <valuePrefix>"</valuePrefix>
+      <valueSuffix>"</valueSuffix>
+    </input>
+    <input type="multiselect" token="rk">
+      <label>Routing Keys (incidents)</label>
+      <fieldForLabel>routing_key</fieldForLabel>
+      <fieldForValue>routing_key</fieldForValue>
+      <search>
+        <query>index=victorops type="incident" | dedup routing_key | fields routing_key</query>
+        <earliest>0</earliest>
+        <latest></latest>
+      </search>
+    </input>
+    <input type="multiselect" token="orgs">
+      <label>VictorOps Org</label>
+      <choice value="*">All</choice>
+      <fieldForLabel>slug</fieldForLabel>
+      <fieldForValue>slug</fieldForValue>
+      <search>
+        <query>index="victorops" | dedup slug | fields slug</query>
+        <earliest>-7d@h</earliest>
+        <latest>now</latest>
+      </search>
+      <initialValue>victorops-demo</initialValue>
+      <valuePrefix>"</valuePrefix>
+      <valueSuffix>"</valueSuffix>
+      <delimiter>, </delimiter>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Events</title>
+      <table>
+        <search>
+          <query>index="victorops" | where type in($types$) | where slug in($orgs$) | eval note=case(type=="incident", ENTITY_ID, type=="chat",user.": ".text, type=="oncall",user." is ".state."-call for ".team.":".group, type=="paging", user." paged via ".method_type." for ".page_id) | table _time, note</query>
+          <earliest>$field3.earliest$</earliest>
+          <latest>$field3.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+</form>

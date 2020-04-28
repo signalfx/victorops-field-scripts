@@ -1,0 +1,110 @@
+<form theme="dark">
+  <label>On-Call Review</label>
+  <fieldset submitButton="false">
+    <input type="time" token="time">
+      <label></label>
+      <default>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="multiselect" token="team">
+      <label>Team</label>
+      <choice value="*">All</choice>
+      <default>*</default>
+      <fieldForLabel>team</fieldForLabel>
+      <fieldForValue>group</fieldForValue>
+      <search>
+        <query>index="victorops"
+| dedup team | table team group</query>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="multiselect" token="slug">
+      <label>Org</label>
+      <choice value="*">All</choice>
+      <initialValue>victorops-demo</initialValue>
+      <fieldForLabel>slug</fieldForLabel>
+      <fieldForValue>slug</fieldForValue>
+      <search>
+        <query>index="victorops" type=oncall | dedup slug</query>
+        <earliest>-7d@h</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Timeline</title>
+      <viz type="timeline_app.timeline">
+        <search>
+          <query>index="victorops" slug=$slug$ type=oncall group=$team$ | transaction user startswith=eval(state="ON") endswith=eval(state="OFF") | eval duration=duration*1000
+| sort by user | table _time user team duration</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="height">425</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="timeline_app.timeline.axisTimeFormat">DAYS</option>
+        <option name="timeline_app.timeline.colorMode">categorical</option>
+        <option name="timeline_app.timeline.maxColor">#DA5C5C</option>
+        <option name="timeline_app.timeline.minColor">#FFE8E8</option>
+        <option name="timeline_app.timeline.numOfBins">9</option>
+        <option name="timeline_app.timeline.tooltipTimeFormat">SECONDS</option>
+        <option name="timeline_app.timeline.useColors">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <drilldown>
+          <set token="form.user">$row.user$</set>
+        </drilldown>
+      </viz>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>User Details</title>
+      <input type="multiselect" token="user">
+        <label>User</label>
+        <fieldForLabel>user</fieldForLabel>
+        <fieldForValue>user</fieldForValue>
+        <search>
+          <query>index="victorops" slug=$slug$ type=oncall | dedup user | table user</query>
+          <earliest>-30d@d</earliest>
+          <latest>now</latest>
+        </search>
+        <delimiter> </delimiter>
+      </input>
+      <input type="multiselect" token="types">
+        <label>Types</label>
+        <choice value="incident">Incidents</choice>
+        <choice value="paging">Paging</choice>
+        <choice value="chat">Chats</choice>
+        <choice value="oncall">On-Call</choice>
+        <initialValue>incident,paging,chat,oncall</initialValue>
+        <valuePrefix>"</valuePrefix>
+        <valueSuffix>"</valueSuffix>
+        <delimiter>,</delimiter>
+      </input>
+      <table>
+        <search>
+          <query>index="victorops" slug=$slug$ (user=$user$ OR ACK_USER=$user$) (type!=paging OR cancellation="false") | where type in($types$) |  eval note=case(type=="incident", if(entity_display_name=="",ENTITY_ID, entity_display_name), type=="chat", user.": ".text, type=="oncall",user." is ".state."-call for ".team, type=="paging", user." paged via ".method_type." for ".page_id) | table _time, note</query>
+          <earliest>$time.earliest$</earliest>
+          <latest>$time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">false</option>
+      </table>
+    </panel>
+  </row>
+</form>

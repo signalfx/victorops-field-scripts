@@ -1,0 +1,440 @@
+<form stylesheet="dark.css" theme="dark">
+  <label>Incident Response Dashboard</label>
+  <description>What's happening around here?</description>
+  <fieldset submitButton="false" autoRun="true">
+    <input type="time" token="field1">
+      <label>Time Range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="multiselect" token="rk" searchWhenChanged="true">
+      <label>Routing Key(s)</label>
+      <choice value="*">* (all)</choice>
+      <default>*</default>
+      <initialValue>*</initialValue>
+      <delimiter> or </delimiter>
+      <fieldForLabel>routing_key</fieldForLabel>
+      <fieldForValue>routing_key</fieldForValue>
+      <search>
+        <query>index="victorops" routing_key | dedup routing_key</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="multiselect" token="hostName">
+      <label>Host Name(s)</label>
+      <choice value="*">* (all)</choice>
+      <default>*</default>
+      <delimiter> OR </delimiter>
+      <fieldForLabel>hostName</fieldForLabel>
+      <fieldForValue>hostName</fieldForValue>
+      <search>
+        <query>index="victorops" hostName | dedup hostName</query>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="multiselect" token="mt">
+      <label>Monitoring Tool(s)</label>
+      <choice value="*">* (all)</choice>
+      <default>*</default>
+      <initialValue>*</initialValue>
+      <delimiter> OR </delimiter>
+      <fieldForLabel>monitoring_tool</fieldForLabel>
+      <fieldForValue>monitoring_tool</fieldForValue>
+      <search>
+        <query>index="victorops" monitoring_tool | dedup monitoring_tool</query>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </search>
+    </input>
+    <input type="multiselect" token="org">
+      <label>Org</label>
+      <search>
+        <query/>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+      <choice value="victorops">VictorOps</choice>
+      <choice value="victorops-demo">Demo</choice>
+      <choice value="*">All</choice>
+      <delimiter> </delimiter>
+      <default>victorops-demo</default>
+    </input>
+    <input type="radio" token="stg" searchWhenChanged="true">
+      <label>Include staging data</label>
+      <choice value="">Yes</choice>
+      <choice value="NOT env=&quot;staging&quot;">No</choice>
+      <default></default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Unacknowledged Incident Count</title>
+      <single>
+        <search>
+          <query>index="victorops" slug=$org$ $stg$ ENTITY_TYPE!="" ENTITY_ID hostName=$hostName$ routing_key=$rk$ monitoring_tool=$mt$ $stg$ | eventstats latest(IncidentNum) by _time, IncidentNum | sort - _time | dedup IncidentNum | search CURRENT_ALERT_PHASE ="unacked" | stats count</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x65a637","0xd93f3c","0xd93f3c","0xd93f3c","0xd93f3c"]</option>
+        <option name="rangeValues">[0,5,10,15]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="underLabel">Triggered incidents not yet acknowledged.</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Acknowledged Incident Count</title>
+      <single>
+        <search>
+          <query>index="victorops" slug=$org$ $stg$ ENTITY_TYPE!="" ENTITY_ID!="" hostName=$hostName$ routing_key=$rk$ monitoring_tool=$mt$ | eventstats latest(IncidentNum) by _time, IncidentNum | sort - _time | dedup IncidentNum | search CURRENT_ALERT_PHASE ="acked" | stats count</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x65a637","0x65a637","0xf7bc38","0xd93f3c"]</option>
+        <option name="rangeValues">[0,5,10]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="underLabel">Incidents that are active</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Downtime Cost of Live Incidents</title>
+      <single>
+        <search>
+          <query>index="victorops" slug=$org$ ENTITY_TYPE ENTITY_ID!="" IncidentNum hostName=* routing_key=* monitoring_tool=*  | eventstats latest(IncidentNum) by IncidentNum  | sort - _time  | dedup IncidentNum  | search CURRENT_ALERT_PHASE !="resolved"  | eval age=(now()-INCIDENT_TIMESTAMP/1000)/60  | eval downtime=age*100 | eval downTimeCost="$$".tostring(round(age*100,0),"commas")| stats sum(downtime)</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xd93f3c","0xd93f3c","0xd93f3c","0xd93f3c","0xd93f3c"]</option>
+        <option name="rangeValues">[100000,200000,400000,600000]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unit">$</option>
+        <option name="unitPosition">before</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Unplanned Work Time</title>
+      <single>
+        <search>
+          <query>index="victorops" slug=victorops-demo  ENTITY_TYPE ENTITY_ID!="" IncidentNum hostName=* routing_key=* monitoring_tool=* | dedup IncidentNum | where CURRENT_ALERT_PHASE!="RESOLVED" | eval ageSeconds=round((now()-INCIDENT_TIMESTAMP/1000),0) | sort - ageSeconds |rename ageSeconds AS "Age", IncidentNum AS "Inc. No.", entity_display_name AS "Name", CURRENT_ALERT_PHASE AS "State" | stats sum(Age) as "Time" | eval "Time"=tostring($$Time$$,"duration")</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">none</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x65a637","0x6db7c6","0xf7bc38","0xf58f39","0xd93f3c"]</option>
+        <option name="rangeValues">[0,30,70,100]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Incidents by Routing Key</title>
+      <chart>
+        <search>
+          <query>index="victorops" slug=$org$  $stg$ ENTITY_TYPE hostName=$hostName$ routing_key=$rk$ monitoring_tool=$mt$ | dedup IncidentNum | stats count by routing_key |sort - count</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">zero</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <drilldown>
+          <set token="form.rk">$click.value$</set>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>Incidents by Monitoring Tool</title>
+      <chart>
+        <search>
+          <query>index="victorops" slug=$org$  $stg$ ENTITY_TYPE hostName=$hostName$ routing_key=$rk$ monitoring_tool=$mt$ NOT monitoring_tool="" | dedup IncidentNum | stats count by monitoring_tool | sort - count</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">pie</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">zero</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trellis.splitBy">_aggregation</option>
+        <drilldown>
+          <set token="mt">$click.value$</set>
+          <set token="form.mt">$click.value$</set>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>Incidents by Current Phase</title>
+      <chart>
+        <search>
+          <query>index="victorops" slug=$org$  $stg$ ENTITY_TYPE hostName=$hostName$ routing_key=$rk$ monitoring_tool=$mt$ CURRENT_ALERT_PHASE != "" | eventstats latest(IncidentNum) by _time, IncidentNum | sort - _time | dedup IncidentNum  | stats count by CURRENT_ALERT_PHASE</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Incidents by Time of Day</title>
+      <chart>
+        <search>
+          <query>index="victorops" $stg$ slug=$org$  ENTITY_TYPE hostName=$hostName$ routing_key=$rk$ CURRENT_ALERT_PHASE = "UNACKED" monitoring_tool=$mt$ | timechart count by CURRENT_ALERT_PHASE</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisEnd</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trellis.splitBy">_aggregation</option>
+        <drilldown>
+          <link target="_blank">search?q=index="victorops" $stg$ slug=$org$  ENTITY_TYPE hostName=$hostName$ routing_key=$rk$ CURRENT_ALERT_PHASE = "UNACKED" monitoring_tool=$mt$ | table IncidentNum, env, slug, _time, entity_display_name, message_type, "CURRENT_ALERT_PHASE", ALERT_COUNT, hostName, monitoring_tool&amp;earliest=$earliest$&amp;latest=$latest$</link>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Cumulative Unplanned Work Time</title>
+      <chart>
+        <search>
+          <query>index="victorops" slug=*  ENTITY_TYPE ENTITY_ID!="" IncidentNum hostName=* routing_key=* monitoring_tool=* | dedup IncidentNum | eval ageSeconds=round(if(CURRENT_ALER_PHASE!="RESOLVED",(LAST_TIMESTAMP - INCIDENT_TIMESTAMP)/1000,now()-INCIDENT_TIMESTAMP/1000),0) | eval "Time"=tostring(ageSeconds,"duration") | eval ageMinutes=ageSeconds/(60*60) | timechart span=1h sum(ageMinutes) as "Time", count(IncidentNum) as "Incidents"</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">collapsed</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">auto</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">auto</option>
+        <option name="charting.axisY2.enabled">1</option>
+        <option name="charting.axisY2.scale">linear</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.overlayFields">Incidents</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">default</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">bottom</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>User updates</title>
+      <table>
+        <search>
+          <query>index="victorops" slug=$org$ type=chat | table _time, user, text</query>
+          <earliest>-60m@m</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Live incidents</title>
+      <table>
+        <search>
+          <query>index="victorops" slug=$org$ $stg$ ENTITY_TYPE ENTITY_ID!="" IncidentNum hostName=$hostName$ routing_key=$rk$ monitoring_tool=$mt$ | eventstats latest(IncidentNum) by IncidentNum | sort - _time | dedup IncidentNum | search CURRENT_ALERT_PHASE !="resolved" | eval ageSeconds=(now()-INCIDENT_TIMESTAMP/1000) | eval ageTime=strftime(ageSeconds, "%H:%M:%S") | sort - ageSeconds | rename ageTime AS "Age", IncidentNum AS "Inc. No.", entity_display_name AS "Name", CURRENT_ALERT_PHASE AS "State", slug as "Org", ENTITY_ID as "Entity Id", hostname as "Host", monitoring_tool AS "Monitoring Tool" | table "Inc. No.", "Age", Org, Name, "State", "Entity Id" Host, "Monitoring Tool" | sort -_time</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>30s</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">5</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">row</option>
+        <option name="percentagesRow">false</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+        <format type="number" field="Age">
+          <option name="precision">0</option>
+          <option name="unit">sec</option>
+        </format>
+        <drilldown>
+          <link target="_blank">https://portal.victorops.com/client/$row.Org$/popoutIncident?incidentName=$row.Inc.%20No.$</link>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>User's Incidents</title>
+      <table>
+        <search>
+          <query>index="victorops" slug=$org$  ENTITY_TYPE ENTITY_ID!="" IncidentNum hostName=* routing_key=* monitoring_tool=* CURRENT_ALERT_PHASE ="ACKED" | stats list(entity_display_name) AS "Incident Name", count by ACK_USER</query>
+          <earliest>$field1.earliest$</earliest>
+          <latest>$field1.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+          <refresh>2m</refresh>
+          <refreshType>delay</refreshType>
+        </search>
+        <option name="count">20</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+</form>
